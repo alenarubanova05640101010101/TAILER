@@ -27,7 +27,7 @@ test('date helpers',()=>{assert.equal(dateLabel({day:6,endDay:6}),'6 ноябр�
 
 const {hasProfile,completeRegistration,profileFields,completeInterests,interestFields,contactFields,identityValid}=await import('../dist/model.js');
 const full=s=>completeInterests(completeRegistration(s,identity),{interests:['Спорт']});
-const identity={firstName:' Анна ',lastName:' Смирнова ',program:' Дизайн '};
+const identity={firstName:' Анна ',lastName:' Смирнова ',university:' НИУ ВШЭ ',program:' Дизайн '};
 test('first visit and legacy demo require registration; completed profile survives reload',()=>{
   const before=initialState();assert.equal(hasProfile(before),false);
   const legacy=register(before,'unityfest');legacy.profile={...legacy.profile,name:'Аня Смирнова',registered:undefined};
@@ -38,7 +38,7 @@ test('first visit and legacy demo require registration; completed profile surviv
   assert.ok(after.registrations.unityfest);assert.equal(legacy.profile.registered,undefined);
 });
 test('all three registration fields reject blank, missing and oversized values',()=>{
-  for(const [key,max] of Object.entries({firstName:60,lastName:60,program:100})){
+  for(const [key,max] of Object.entries({firstName:60,lastName:60,university:100,program:100})){
     for(const value of ['', '   ',undefined,'а'.repeat(max+1)])assert.throws(()=>profileFields({...identity,[key]:value}));
   }
   assert.equal(hasProfile({profile:{registered:true}}),false);
@@ -135,6 +135,7 @@ test('ics: timed event in MSK, all-day event, alarm, CRLF',()=>{
   for(const l of t.split('\r\n'))assert.ok(new TextEncoder().encode(l).length<=75);
   for(const e of events)assert.ok(M.icsFor(e,2).includes('BEGIN:VEVENT'));
 });
+test('invite link round-trips and rejects unknown events',()=>{const e=events.find(x=>x.id==='diwali');const u=M.inviteUrl('https://x.test/',e,'Анна Б');assert.deepEqual(M.parseInvite(new URL(u).hash),{eventId:'diwali',from:'Анна Б'});assert.equal(M.parseInvite('#invite=nope'),null);assert.equal(M.parseInvite('#home'),null);assert.match(M.shareText(e,{going:0},'Анна'),/Анна приглашает тебя на мероприятие/)});
 test('share text',()=>{const e=events.find(x=>x.id==='diwali');assert.match(M.shareText(e,{going:12}),/Уже идут 12/);assert.match(M.shareText(e,{going:0}),/Пока никто/)});
 test('leaderboard: sorted by points, top 3 get places 1-3, user placed by own balance',async()=>{
   const {leaderboard}=await import('../dist/model.js');

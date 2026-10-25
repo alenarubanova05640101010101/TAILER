@@ -1,7 +1,7 @@
 export const DEMO_NOW = '2026-10-25T12:00:00+03:00';
 import {events,spheres,interests,dateLabel,timeLabel,onDay} from './events.js';
 export {events,spheres,interests,dateLabel,timeLabel,onDay};
-export function initialState(){return {version:1,profile:{name:'',firstName:'',lastName:'',program:'',registered:false,interests:[],contact:'',contactVisible:false,open:true},saved:[],registrations:{},offer:{eventId:'diwali',status:'available',amount:100},history:[],invitations:{},chats:{},chatSeq:0,notificationsRead:false}}
+export function initialState(){return {version:1,profile:{name:'',firstName:'',lastName:'',university:'',program:'',registered:false,interests:[],contact:'',contactVisible:false,open:true},saved:[],registrations:{},offer:{eventId:'diwali',status:'available',amount:100},history:[],invitations:{},chats:{},chatSeq:0,notificationsRead:false}}
 export const balance=s=>s.history.reduce((sum,x)=>sum+x.amount,0);
 export const attended=(s,id)=>s.history.some(x=>x.key===`attendance:${id}`);
 export function reward(s,id){return s.offer.eventId===id&&s.offer.status==='accepted'?s.offer.amount:50}
@@ -16,11 +16,11 @@ export function guestAttendance(s,id){const n=structuredClone(s);if(n.invitation
 export function recommended(s){return [...events].sort((a,b)=>{const score=e=>e.interests.filter(x=>s.profile.interests.includes(x)).length;return score(b)-score(a)||a.day-b.day||a.time.localeCompare(b.time)})}
 
 export function profileFields(values){
-  const limits={firstName:60,lastName:60,program:100};
+  const limits={firstName:60,lastName:60,university:100,program:100};
   const fields={};
   for(const [key,max] of Object.entries(limits)){
     const value=typeof values?.[key]==='string'?values[key].trim():'';
-    if(!value||value.length>max)throw new Error('Заполни все поля: имя, фамилию и направление обучения.');
+    if(!value||value.length>max)throw new Error('Заполни все поля: имя, фамилию, вуз и направление обучения.');
     fields[key]=value;
   }
   return {...fields,name:`${fields.firstName} ${fields.lastName}`,registered:true};
@@ -176,9 +176,20 @@ export const canAddJoiner=(s,id)=>(CROWD[id]?.[0]??0)+(s.joined?.[id]??0)<people
 const plural=(n,a,b,c)=>{const m=n%100,d=n%10;return m>10&&m<20?c:d===1?a:d>=2&&d<=4?b:c};
 export const openWord=n=>`${n} ${plural(n,'открытый участник','открытых участника','открытых участников')}`;
 export const reminderText=(e,n)=>`${e.time?'Через час':'Завтра'} «${e.title}», ${openWord(n)} ${plural(n,'идёт','идут','идут')}`;
-export function shareText(e,c){
+export function shareText(e,c,from=''){
   const when=`${dateLabel(e)}${e.time?', '+e.time:''}`;
-  return `Пойдём вместе на «${e.title}» — ${when}, ${e.place}. ${c.going?`Уже идут ${c.going}.`:'Пока никто не записался — будем первыми.'}`;
+  const lead=from?`${from} приглашает тебя на мероприятие «${e.title}»`:`Пойдём вместе на «${e.title}»`;
+  return `${lead} — ${when}, ${e.place}. ${c.going?`Уже идут ${c.going}.`:'Пока никто не записался — будем первыми.'}`;
+}
+// Ссылка-приглашение: #invite=<id события>&from=<имя пригласившего>
+export function inviteUrl(base,e,from=''){
+  const q=new URLSearchParams({invite:e.id});if(from)q.set('from',from.slice(0,60));
+  return `${base}#${q}`;
+}
+export function parseInvite(hash){
+  const q=new URLSearchParams(String(hash||'').replace(/^#/,''));
+  const id=q.get('invite');const e=events.find(x=>x.id===id);
+  return e?{eventId:e.id,from:(q.get('from')||'').slice(0,60)}:null;
 }
 
 // .ics: событие с временем — по Москве (UTC+3, без перехода на летнее время), без времени — на весь день.

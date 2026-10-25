@@ -1,5 +1,5 @@
 import {events, interests, dateLabel, timeLabel} from './events.js';
-import {applyOrg, loadOrg, saveOrg, readParticipant, clubsOf, ownEvents, isCustom, clubName, eventFields, updateEvent, resetEvent, createEvent, deleteEvent, parsePost, createChannel, postToChannel, deleteChannel, eventStats, orgTotals, analytics, analyticsTotals, SOURCES, DAYS_BEFORE, ORG_KEY} from './organizer.js';
+import {applyOrg, loadOrg, saveOrg, readParticipant, clubsOf, ownEvents, isCustom, clubName, eventFields, updateEvent, resetEvent, createEvent, deleteEvent, parsePost, createChannel, postToChannel, deleteChannel, eventStats, orgTotals, analytics, analyticsTotals, channelStats, channelAnalytics, SOURCES, DAYS_BEFORE, ORG_KEY} from './organizer.js';
 
 const $ = s => document.querySelector(s);
 const modal = $('#modal');
@@ -56,7 +56,8 @@ function overview() {
   if (!own.length) return `<div class="panel"><h2>Пока нет мероприятий</h2><p style="margin:8px 0 16px">У «${esc(org.club)}» ещё нет событий в афише. Добавь первое — и здесь появится статистика.</p><button class="primary" data-action="new-event">Добавить мероприятие</button></div>`;
   const t = orgTotals(s, own);
   const stat = (n, l) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`;
-  return `<div class="stat-grid">${stat(t.going, 'записались через Тайлер')}${stat(t.open, 'открыты к знакомству')}${stat(t.invites, 'знакомств начато (приглашения в чатах)')}${stat(t.first, 'первокурсников среди идущих')}${stat(t.views, 'просмотров карточек')}${stat(pct(t.going, t.views), 'просмотр → запись')}</div>
+  return `<p class="tab-lead">Сводка за минуту: сколько людей идёт к вам, сколько открыто к знакомству и какие мероприятия популярнее. Подробные KPI — воронка, доходимость, источники и канал — собраны во вкладке «Аналитика», а добавлять и править события можно во вкладке «Мероприятия».</p>
+<div class="stat-grid">${stat(t.going, 'записались через Тайлер')}${stat(t.open, 'открыты к знакомству')}${stat(t.invites, 'знакомств начато (приглашения в чатах)')}${stat(t.first, 'первокурсников среди идущих')}${stat(t.views, 'просмотров карточек')}${stat(pct(t.going, t.views), 'просмотр → запись')}</div>
 <section class="panel"><div class="org-head"><h2>По мероприятиям</h2></div><div class="org-table-wrap"><table class="org-table"><thead><tr><th>Мероприятие</th><th>Идут</th><th>Открыты</th><th>1 курс</th><th>Знакомства</th><th>Просмотры</th><th></th></tr></thead><tbody>${t.rows.map(({e, st}) => `<tr><td>${esc(e.title)}<small style="display:block;font-weight:500;color:var(--muted)">${dateLabel(e)} · ${timeLabel(e)}</small></td><td>${st.going}</td><td>${st.open}</td><td>${st.first}</td><td>${st.invites}</td><td>${st.views}</td><td><button class="text-link" data-action="details" data-id="${esc(e.id)}">Подробнее</button></td></tr>`).join('')}</tbody></table></div>
 <p class="org-note">Это демо без сервера. Участники из пула «Найди своих» вымышлены, просмотры и сохранения — оценка по числу записавшихся плюс реальные открытия карточки в этом браузере. Реальны только действия, сделанные в приложении участника на этом же устройстве. Все, кто записался, пришли именно из Тайлера.</p></section>`;
 }
@@ -87,47 +88,38 @@ function eventsTab() {
 function field(key, label, v, {full = false, type = 'text', max = 200, req = false, extra = ''} = {}) {
   return `<label class="field ${full ? 'full' : ''}">${label}<input name="${key}" type="${type}" maxlength="${max}" ${req ? 'required' : ''} ${extra} value="${esc(v ?? '')}"></label>`;
 }
+const iso = d => d ? `2026-11-${String(d).padStart(2, '0')}` : '';
+const dayOf = v => /^2026-11-(\d\d)$/.test(v || '') ? Number(v.slice(8)) : NaN;
 function eventForm(e = {}) {
-  const isNew = !e.id;
+  const isNew = !e.id, multi = e.endDay > e.day;
+  const sec = (title, body) => `<fieldset class="form-sec"><legend>${title}</legend><div class="form-grid">${body}</div></fieldset>`;
   return `<form id="event-form" class="org-form" data-id="${esc(e.id || '')}">
-${isNew ? `<div class="paste-box"><b>Заполнить из текста поста</b><p>Вставь анонс из Telegram или ВК: подставим название, дату, время и место, если найдём. Это простые правила, не нейросеть: проверь результат. Подключить ИИ можно будет вместе с сервером.</p><textarea id="paste" placeholder="Текст анонса" maxlength="4000"></textarea><button type="button" class="secondary" data-action="parse" style="margin-top:8px">Заполнить поля</button></div>` : ''}
-<div class="form-grid">${field('title', 'Название', e.title, {full: true, req: true, max: 120})}
+${isNew ? `<div class="paste-box"><b>Заполнить из текста поста</b><p>Вставь анонс из Telegram или ВК: подставим название, дату, время и место, если найдём. Это простые правила, не нейросеть: проверь результат.</p><textarea id="paste" placeholder="Текст анонса" maxlength="4000"></textarea><button type="button" class="secondary" data-action="parse" style="margin-top:8px">Заполнить поля</button></div>` : ''}
+${sec('Что за мероприятие', `${field('title', 'Название', e.title, {full: true, req: true, max: 120})}
 <label class="field full">Сфера<select name="category">${interests.map(c => `<option ${c === (e.category || interests[0]) ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
-${field('day', 'День ноября', e.day, {type: 'number', req: true, extra: 'min="1" max="30"'})}${field('endDay', 'Последний день (если несколько)', e.endDay !== e.day ? e.endDay : '', {type: 'number', extra: 'min="1" max="30"'})}
-${field('time', 'Время (ЧЧ:ММ)', e.time, {max: 5, extra: 'placeholder="18:30" inputmode="numeric"'})}${field('duration', 'Продолжительность', e.duration, {max: 80})}
-${field('place', 'Место (коротко)', e.place, {req: true, max: 100})}${field('cost', 'Участие / стоимость', e.cost, {max: 80})}
-${field('location', 'Адрес / как найти', e.location, {full: true, max: 200})}${field('deadline', 'Дедлайн регистрации', e.deadline, {full: true, max: 140})}
-${field('short', 'Надпись на обложке', e.short ? e.short.replace('\n', ' ') : '', {full: true, max: 40})}
-<label class="field full">Описание<textarea name="desc" required maxlength="2000">${esc(e.desc || '')}</textarea></label>
-<label class="field full">Что ждёт участников<textarea name="expect" maxlength="1000">${esc(e.expect || '')}</textarea></label></div>
+${field('short', 'Надпись на обложке', e.short ? e.short.replace('\n', ' ') : '', {full: true, max: 40, extra: 'placeholder="Коротко, до 40 символов"'})}`)}
+${sec('Когда', `${field('date', multi ? 'Первый день' : 'Дата', iso(e.day), {type: 'date', req: true, extra: 'min="2026-11-01" max="2026-11-30"'})}
+${field('time', 'Начало', e.time, {max: 5, extra: 'placeholder="18:30" inputmode="numeric"'})}
+<label class="check full"><input type="checkbox" id="multi-day" ${multi ? 'checked' : ''}> Мероприятие идёт несколько дней</label>
+<div class="field full end-date" ${multi ? '' : 'hidden'}>${field('endDate', 'Последний день', multi ? iso(e.endDay) : '', {type: 'date', extra: 'min="2026-11-01" max="2026-11-30"'})}</div>
+${field('duration', 'Продолжительность', e.duration, {full: true, max: 80, extra: 'placeholder="2 часа"'})}
+${field('deadline', 'Дедлайн регистрации', e.deadline, {full: true, max: 140})}`)}
+${sec('Где и сколько', `${field('place', 'Место (коротко)', e.place, {req: true, max: 100})}${field('cost', 'Участие / стоимость', e.cost, {max: 80, extra: 'placeholder="Бесплатно"'})}
+${field('location', 'Адрес / как найти', e.location, {full: true, max: 200})}`)}
+${sec('Описание', `<label class="field full">О мероприятии<textarea name="desc" required maxlength="2000">${esc(e.desc || '')}</textarea></label>
+<label class="field full">Что ждёт участников<textarea name="expect" maxlength="1000">${esc(e.expect || '')}</textarea></label>`)}
 <p id="form-error" class="registration-error" role="alert"></p>
 <div class="modal-actions"><button class="primary" type="submit">${isNew ? 'Добавить' : 'Сохранить'}</button></div></form>`;
 }
 
 function analyticsTab() {
-  const s = readParticipant();
-  const own = ownEvents(org.club);
-  if (!own.length) return `<div class="panel"><h2>Аналитика появится вместе с мероприятиями</h2><p style="margin:8px 0 16px">Добавь первое мероприятие «${esc(org.club)}» — и здесь покажем, сколько человек пришло через Тайлер.</p><button class="primary" data-action="new-event">Добавить мероприятие</button></div>`;
-  if (anEvent !== 'all' && !own.some(e => e.id === anEvent)) anEvent = 'all';
-  const one = anEvent === 'all' ? null : own.find(e => e.id === anEvent);
-  const t = analyticsTotals(s, one ? [one] : own);
-  const first = pct(t.first, t.going), came = pct(t.came, t.going);
-  const stat = (n, l, hint = '') => `<div class="stat"><b>${n}</b><span>${l}</span>${hint ? `<em>${hint}</em>` : ''}</div>`;
-  const bar = (label, n, base, cls = '') => `<div class="bar-row"><span>${label}</span><div class="bar ${cls}"><i style="width:${Math.round(n / Math.max(base, 1) * 100)}%"></i></div><b>${n}</b></div>`;
-  const dmax = Math.max(...t.dynamics, 1);
-  const topTally = {};
-  for (const {e} of t.rows) for (const [n, c] of eventStats(s, e).top) topTally[n] = (topTally[n] || 0) + c;
-  const top = Object.entries(topTally).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ru')).slice(0, 5);
-  const topMax = Math.max(...top.map(x => x[1]), 1);
-  return `<div class="org-head"><h2>Аналитика${one ? '' : ' · все мероприятия'}</h2><label class="an-pick">Мероприятие<select data-action-change="an-event"><option value="all">Все мероприятия</option>${own.map(e => `<option value="${esc(e.id)}" ${e.id === anEvent ? 'selected' : ''}>${esc(e.title)}</option>`).join('')}</select></label></div>
-${one ? `<p class="an-sub">${dateLabel(one)} · ${timeLabel(one)} · ${esc(one.place)}</p>` : ''}
-<div class="stat-grid">${stat(t.going, 'зарегистрировались через Тайлер')}${stat(t.came, 'пришли из них')}${stat(came, 'доходимость: зарегистрировались → пришли', t.rate >= 75 ? 'выше среднего' : t.rate >= 65 ? 'в норме' : 'ниже нормы, напомни участникам')}${stat(pct(t.going, t.views), 'просмотр карточки → запись')}${stat(first, 'первокурсников среди записавшихся')}</div>
-<div class="an-grid"><section class="panel"><h3 class="an-h">Воронка</h3>${bar('Посмотрели карточку', t.views, t.views)}${bar('Сохранили', t.saves, t.views)}${bar('Зарегистрировались', t.going, t.views)}${bar('Пришли', t.came, t.views, 'accent')}<p class="org-note">Из ${t.going} записавшихся не дошли ${t.going - t.came}. Это нормально: обычно доходит от 60 до 90%.</p></section>
-<section class="panel"><h3 class="an-h">Откуда пришли в Тайлере</h3>${SOURCES.map((n, i) => bar(n, t.sources[i], Math.max(...t.sources, 1))).join('')}<p class="org-note">Через какой раздел человек нашёл мероприятие перед записью.</p></section></div>
-<section class="panel" style="margin-top:18px"><h3 class="an-h">Когда записываются</h3><div class="cols" role="img" aria-label="Записи по дням до мероприятия">${t.dynamics.map((n, i) => `<div class="col"><b>${n}</b><i style="height:${Math.max(4, Math.round(n / dmax * 100))}px"></i><span>${DAYS_BEFORE[i]}</span></div>`).join('')}</div><p class="org-note">Основная волна записей приходится на последние дни — публикуй анонс и напоминания в канале заранее.</p></section>
-${one ? '' : `<section class="panel" style="margin-top:18px"><h3 class="an-h">По мероприятиям</h3><div class="org-table-wrap"><table class="org-table"><thead><tr><th>Мероприятие</th><th>Зарегистрировано</th><th>Пришли</th><th>Доходимость</th><th></th></tr></thead><tbody>${t.rows.map(({e, a}) => `<tr><td>${esc(e.title)}<small style="display:block;font-weight:500;color:var(--muted)">${dateLabel(e)} · ${timeLabel(e)}</small></td><td>${a.going}</td><td>${a.came}</td><td><span class="rate"><span class="bar"><i style="width:${a.rate}%"></i></span>${a.going ? a.rate + '%' : '—'}</span></td><td><button class="text-link" data-action="an-open" data-id="${esc(e.id)}">Открыть</button></td></tr>`).join('')}</tbody></table></div></section>`}
-<section class="panel" style="margin-top:18px"><h3 class="an-h">Кто приходит</h3><div class="an-grid flat"><div>${bar('Открыты к знакомству', t.open, Math.max(t.going, 1))}${bar('Первокурсники', t.first, Math.max(t.going, 1))}${bar('Позвали друзей (приглашения)', t.invites, Math.max(t.going, 1))}</div><div><b class="an-mini">Чем интересуются</b>${top.length ? top.map(([n, c]) => bar(esc(n), c, topMax)).join('') : '<p>Пока никто не записался.</p>'}</div></div></section>
-<p class="org-note">Прототип с демо-данными. Регистрации — реальные действия в этом браузере плюс вымышленный пул «Найди своих»; цифры «пришли» и разбивки — оценка. В настоящей версии посещение подтверждается на входе, а источники считаются по переходам.</p>`;
+  const stat = l => `<div class="stat"><b>—</b><span>${l}</span></div>`;
+  const group = (title, names) => `<h3 class="kpi-h">${title}</h3><div class="stat-grid">${names.map(stat).join('')}</div>`;
+  return `<div class="org-head"><h2>Аналитика</h2></div>
+<p class="tab-lead">Показатели появятся, когда подключим реальные данные. Пока здесь только список того, что мы будем считать.</p>
+${group('Ключевые показатели', ['Просмотры карточки', 'Зарегистрировались через Тайлер', 'Конверсия: просмотр → запись', 'Пришли на мероприятие', 'Доходимость: запись → приход', 'Не дошли (no-show)'])}
+${group('Аудитория', ['Первокурсники среди записавшихся', 'Открыты к знакомству', 'Приглашений в чатах на одного пришедшего', 'Сохранили карточку'])}
+${group('Канал', ['Подписчики канала', 'Посещаемость канала', 'Планируют прийти с канала', 'Дошли из канала', 'Доходимость канала', 'Доля канала среди записавшихся'])}`;
 }
 
 function channelTab() {
@@ -167,7 +159,10 @@ document.addEventListener('click', ev => {
     case 'reset-event': if (commit(resetEvent(org, id))) { render(); toast('Возвращено как в анонсе'); } break;
     case 'parse': {
       const f = parsePost($('#paste').value), form = $('#event-form');
-      for (const [k, v] of Object.entries(f)) if (form.elements[k]) form.elements[k].value = v;
+      const {day, endDay, ...rest} = f;
+      if (day) form.elements.date.value = iso(day);
+      if (endDay > day) { $('#multi-day').checked = true; syncMulti(); form.elements.endDate.value = iso(endDay); }
+      for (const [k, v] of Object.entries(rest)) if (form.elements[k]) form.elements[k].value = v;
       toast(Object.keys(f).length ? 'Поля заполнены — проверь их' : 'Ничего не нашли, заполни вручную');
       break;
     }
@@ -185,7 +180,11 @@ document.addEventListener('submit', ev => {
       const club = clubName(formValues(form).club);
       if (commit({...org, club})) render();
     } else if (fid === 'event-form') {
-      const values = formValues(form), id = form.dataset.id;
+      const {date, endDate, ...values} = formValues(form), id = form.dataset.id;
+      values.day = dayOf(date);
+      values.endDay = $('#multi-day').checked ? dayOf(endDate) : values.day;
+      if (Number.isNaN(values.day)) throw new Error('Выбери дату в ноябре 2026.');
+      if ($('#multi-day').checked && Number.isNaN(values.endDay)) throw new Error('Укажи последний день или сними отметку «несколько дней».');
       eventFields(values, {partial: !!id});
       if (commit(id ? updateEvent(org, id, values) : createEvent(org, org.club, values))) { modal.close(); render(); toast(id ? 'Изменения сохранены' : 'Мероприятие добавлено'); }
     } else if (fid === 'channel-form') {
@@ -197,7 +196,14 @@ document.addEventListener('submit', ev => {
   } catch (e) { err(e.message); }
 });
 
+function syncMulti() {
+  const on = $('#multi-day').checked, box = $('.end-date');
+  box.hidden = !on;
+  $('#event-form').elements.endDate.required = on;
+  $('#event-form').elements.date.previousSibling.textContent = on ? 'Первый день' : 'Дата';
+}
 document.addEventListener('change', e => {
+  if (e.target.id === 'multi-day') syncMulti();
   if (e.target.dataset.actionChange === 'an-event') { anEvent = e.target.value; render(); }
 });
 document.addEventListener('input', e => {

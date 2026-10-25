@@ -235,6 +235,13 @@ export function analyticsTotals(s, list) {
 export function channelStats(s, ch) {
   return {subscribers: subscribed(s, ch.id) ? 1 : 0, posts: ch.posts.length};
 }
+// KPI канала: подписчики, регистрации «с канала» (источник), дошедшие из них и вклад канала в общий поток.
+export function channelAnalytics(t, ch, s) {
+  const planned = t.sources[SOURCES.length - 1];
+  const came = t.going ? Math.min(planned, Math.round(planned * t.rate / 100)) : 0;
+  const subs = ch ? channelStats(s, ch).subscribers : 0;
+  return {subscribers: subs, posts: ch ? ch.posts.length : 0, planned, came, rate: planned ? Math.round(came / planned * 100) : 0, share: t.going ? Math.round(planned / t.going * 100) : 0};
+}
 export const readParticipant = (storage = globalThis.localStorage, key = 'tyler-campus-v2') => {
   try { const s = JSON.parse(storage.getItem(key)); if (s?.version === 1 && s.registrations && Array.isArray(s.history)) return s; } catch { /* нет профиля */ }
   return initialState();

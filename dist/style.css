@@ -132,3 +132,21 @@
 .rating-panel .text-link{margin-top:16px}
 .rating-list.full{max-height:60vh;overflow:auto}
 .cover-ai{background:#d9d4f2;color:#4a3a8c}
+
+/* вуз, карточки интересов, приглашение */
+.registration-card .field.full{grid-column:1/-1}
+.interest-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}
+.interest-card{position:relative;display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:#fbfcfa;cursor:pointer;transition:border-color .15s,background .15s,transform .15s;min-height:54px}
+.interest-card:hover{border-color:#b9cba3;transform:translateY(-1px)}
+.interest-card input{position:absolute;opacity:0;inset:0;width:100%;height:100%;margin:0;cursor:pointer}
+.interest-card .ic-name{font-size:12.5px;font-weight:600;line-height:1.3;color:#34493f}
+.interest-card:has(input:checked){background:#eef4e4;border-color:#86a469;box-shadow:0 0 0 1px #86a469 inset}
+.interest-card:has(input:focus-visible){outline:2px solid var(--green);outline-offset:2px}
+@media(max-width:420px){.interest-grid{grid-template-columns:1fr}}
+.invite-banner{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;margin-bottom:18px;border-radius:14px;background:#eef4e4;border:1px solid #cfdcba;color:#34493f}
+.invite-banner svg{width:22px;height:22px;flex:none;margin-top:2px;color:#4b6543}
+.invite-banner b{display:block;font-size:13px}.invite-banner small{display:block;font-size:11.5px;color:#5d7266;line-height:1.5;margin-top:2px}
+.share-preview{padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:#fbfcfa;display:grid;gap:4px;margin-bottom:14px}
+.share-preview small{color:#7a8a82}
+.share-msg{margin:12px 0;padding:12px 14px;border-radius:12px;background:#f4f7ef;font-size:12px;line-height:1.6;color:#4b5f55}
+#share-link{width:100%;font-size:12px}
