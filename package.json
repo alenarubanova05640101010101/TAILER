@@ -1,0 +1,14 @@
+{
+  "name": "tyler",
+  "version": "0.1.0",
+  "description": "Тайлер — студенческое приложение: события вуза и знакомства до мероприятия (прототип).",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "node --test",
+    "start": "node server/server.js",
+    "start:static": "python3 -m http.server 8080 --directory dist"
+  }
+}
